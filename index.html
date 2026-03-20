@@ -1,0 +1,1864 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARMORY — Kanonen Datenbank</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Barlow:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --bg0: #080c08;
+  --bg1: #0f160f;
+  --bg2: #162016;
+  --bg3: #1e2e1e;
+  --bg4: #243424;
+  --green: #4d8c5e;
+  --green-bright: #72c48a;
+  --green-dim: #2a4d35;
+  --amber: #c8a04a;
+  --amber-dim: #6b5220;
+  --red: #c84a4a;
+  --red-bright: #ff7070;
+  --fire: #ff7b2b;
+  --fire-dim: #7a3910;
+  --text: #b8d4b8;
+  --text-dim: #5a7a5a;
+  --text-muted: #3a533a;
+  --border: #2a3e2a;
+  --border-bright: #3d5c3d;
+  --mono: 'Share Tech Mono', monospace;
+  --head: 'Rajdhani', sans-serif;
+  --body: 'Barlow', sans-serif;
+  --radius: 4px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.6);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg0);
+  color: var(--text);
+  font-family: var(--body);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── GRID BACKGROUND ──────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(72,140,90,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(72,140,90,0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(72,140,90,0.08) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── LAYOUT ───────────────────────────────────────── */
+#app { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ── HEADER ───────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 24px;
+  height: 56px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  font-family: var(--head);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: var(--green-bright);
+  margin-right: 32px;
+  white-space: nowrap;
+}
+.logo span { color: var(--text-dim); font-weight: 400; }
+
+nav { display: flex; gap: 2px; flex: 1; }
+
+.nav-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-family: var(--head);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 8px 16px;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: all .15s;
+  position: relative;
+}
+.nav-btn:hover { color: var(--text); background: var(--bg3); }
+.nav-btn.active { color: var(--green-bright); background: var(--green-dim); }
+.nav-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 24px; height: 2px;
+  background: var(--green-bright);
+  border-radius: 2px;
+}
+
+.header-right { display: flex; gap: 8px; align-items: center; }
+
+.conn-indicator {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text-muted);
+}
+.conn-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: 0 0 6px currentColor;
+  transition: all .3s;
+}
+.conn-dot.ok { background: var(--green-bright); color: var(--green-bright); }
+.conn-dot.err { background: var(--red-bright); color: var(--red-bright); }
+
+/* ── VIEWS ────────────────────────────────────────── */
+.view { display: none; flex: 1; padding: 24px; animation: fadeIn .2s ease; }
+.view.active { display: flex; flex-direction: column; gap: 20px; }
+@keyframes fadeIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+
+/* ── PAGE HEADERS ─────────────────────────────────── */
+.page-title {
+  font-family: var(--head);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text);
+  line-height: 1;
+}
+.page-title span { color: var(--green-bright); }
+.page-sub { font-size: 12px; color: var(--text-dim); font-family: var(--mono); margin-top: 4px; letter-spacing: 1px; }
+
+/* ── CARDS ────────────────────────────────────────── */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.card-title {
+  font-family: var(--head); font-size: 13px; font-weight: 600;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* ── FORM ELEMENTS ────────────────────────────────── */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.form-full { grid-column: 1 / -1; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label {
+  font-family: var(--mono); font-size: 10px; color: var(--text-dim);
+  letter-spacing: 1.5px; text-transform: uppercase;
+}
+.field input, .field select, .field textarea {
+  background: var(--bg0);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  outline: none;
+  transition: border-color .15s;
+  width: 100%;
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(72,140,90,0.15);
+}
+.field textarea { resize: vertical; min-height: 80px; }
+.field select option { background: var(--bg1); }
+.field-hint { font-size: 10px; color: var(--text-muted); font-family: var(--mono); }
+
+/* ── BUTTONS ──────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 18px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-family: var(--head); font-size: 13px; font-weight: 600;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.btn-primary { background: var(--green); color: #fff; border-color: var(--green); }
+.btn-primary:hover { background: var(--green-bright); border-color: var(--green-bright); }
+.btn-secondary { background: var(--bg3); color: var(--text); border-color: var(--border); }
+.btn-secondary:hover { background: var(--bg4); border-color: var(--border-bright); }
+.btn-danger { background: var(--bg3); color: var(--red-bright); border-color: var(--red); }
+.btn-danger:hover { background: rgba(200,74,74,0.15); }
+.btn-fire { background: var(--fire-dim); color: var(--fire); border-color: var(--fire); font-size: 15px; padding: 12px 28px; }
+.btn-fire:hover { background: rgba(255,123,43,0.25); }
+.btn-fire.firing { animation: btnPulse .3s ease; }
+.btn-sm { padding: 5px 12px; font-size: 11px; }
+.btn-icon { width: 32px; height: 32px; padding: 0; justify-content: center; border-radius: var(--radius); background: var(--bg3); color: var(--text-dim); border: 1px solid var(--border); cursor: pointer; transition: all .15s; }
+.btn-icon:hover { color: var(--text); border-color: var(--border-bright); }
+@keyframes btnPulse { 0%{transform:scale(1)} 50%{transform:scale(0.95)} 100%{transform:scale(1)} }
+
+/* ── TAGS ─────────────────────────────────────────── */
+.tag {
+  display: inline-flex; align-items: center;
+  padding: 3px 8px; border-radius: 2px;
+  font-family: var(--mono); font-size: 10px;
+  background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text-dim); cursor: pointer; transition: all .15s;
+  letter-spacing: .5px;
+}
+.tag:hover { border-color: var(--green); color: var(--green-bright); }
+.tag.active { background: var(--green-dim); border-color: var(--green); color: var(--green-bright); }
+.tag.type-autoloader { background: rgba(200,160,74,0.1); border-color: var(--amber-dim); color: var(--amber); }
+.tag.type-autokanone { background: rgba(200,74,74,0.1); border-color: #7a3434; color: #e88; }
+.tag.type-normal { background: rgba(72,140,90,0.1); border-color: var(--green-dim); color: var(--green-bright); }
+.tag-remove { margin-left: 4px; opacity: 0.6; }
+.tag-remove:hover { opacity: 1; color: var(--red-bright); }
+
+.tags-input-row { display: flex; gap: 8px; }
+.tags-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; min-height: 28px; }
+
+/* ── CATALOG ──────────────────────────────────────── */
+.catalog-toolbar {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.search-wrap { position: relative; flex: 1; min-width: 200px; }
+.search-wrap input {
+  width: 100%;
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono); font-size: 13px;
+  padding: 9px 12px 9px 36px;
+  border-radius: var(--radius);
+  outline: none;
+  transition: border-color .15s;
+}
+.search-wrap input:focus { border-color: var(--green); }
+.search-icon {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted); pointer-events: none; font-size: 14px;
+}
+.filter-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.filter-tags .tag { font-size: 11px; }
+
+.folder-bar {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+}
+.folder-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 3px;
+  font-family: var(--head); font-size: 12px; font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase;
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--text-dim); cursor: pointer; transition: all .15s;
+}
+.folder-chip:hover { border-color: var(--border-bright); color: var(--text); }
+.folder-chip.active { color: #fff; }
+.folder-chip .folder-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+.cannon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.cannon-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  cursor: pointer;
+  transition: all .2s;
+  position: relative;
+  overflow: hidden;
+}
+.cannon-card::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--green-dim);
+  transition: background .2s;
+}
+.cannon-card:hover { border-color: var(--border-bright); transform: translateY(-1px); box-shadow: var(--shadow); }
+.cannon-card:hover::before { background: var(--green-bright); }
+.cannon-card.type-autoloader::before { background: var(--amber); }
+.cannon-card.type-autokanone::before { background: var(--red-bright); }
+
+.card-name {
+  font-family: var(--head); font-size: 18px; font-weight: 700;
+  letter-spacing: 1px; color: var(--text);
+  margin-bottom: 4px;
+}
+.card-caliber {
+  font-family: var(--mono); font-size: 12px; color: var(--green-bright);
+  margin-bottom: 10px;
+}
+.card-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+.card-stat { display: flex; flex-direction: column; gap: 2px; }
+.card-stat-label { font-family: var(--mono); font-size: 9px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
+.card-stat-value { font-family: var(--mono); font-size: 14px; color: var(--amber); }
+.card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 80px 20px; gap: 16px; text-align: center;
+}
+.empty-icon { font-size: 48px; opacity: .3; }
+.empty-title { font-family: var(--head); font-size: 20px; font-weight: 600; color: var(--text-dim); letter-spacing: 2px; }
+.empty-sub { font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+
+/* ── DETAIL / SIMULATOR ───────────────────────────── */
+.detail-layout { display: grid; grid-template-columns: 1fr 380px; gap: 20px; }
+
+.simulator-wrap {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  position: relative;
+  min-height: 340px;
+  display: flex; flex-direction: column;
+}
+
+.barrel-stage {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+
+/* Tank Barrel SVG */
+#barrelSvg {
+  width: 100%;
+  max-width: 400px;
+  height: 220px;
+  transition: transform .05s ease;
+}
+#barrelSvg.recoil { animation: barrelRecoil .18s ease-out; }
+@keyframes barrelRecoil {
+  0%   { transform: translateX(0); }
+  30%  { transform: translateX(-28px); }
+  100% { transform: translateX(0); }
+}
+
+.muzzle-flash {
+  position: absolute;
+  right: 0; top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  opacity: 0;
+}
+.muzzle-flash.active { animation: flash .12s ease-out forwards; }
+@keyframes flash {
+  0%   { opacity:1; transform: translateY(-50%) scale(1); }
+  100% { opacity:0; transform: translateY(-50%) scale(2.5); }
+}
+
+.smoke-particles { position: absolute; inset: 0; pointer-events: none; }
+.smoke-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(180,200,180,0.15);
+  animation: smokeRise 1.2s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes smokeRise {
+  0%   { transform: translate(0,0) scale(1); opacity:.6; }
+  100% { transform: translate(var(--dx), -80px) scale(3); opacity:0; }
+}
+
+.sim-controls {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+}
+.shot-counter {
+  font-family: var(--mono); font-size: 24px; color: var(--amber);
+  min-width: 60px;
+}
+.shot-counter span { font-size: 12px; color: var(--text-muted); display: block; }
+
+.reload-bar-wrap { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.reload-label { font-family: var(--mono); font-size: 10px; color: var(--text-muted); letter-spacing: 1px; }
+.reload-bar {
+  height: 6px;
+  background: var(--bg3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.reload-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--green-bright);
+  transition: width .1s linear;
+  width: 100%;
+}
+.reload-bar-fill.reloading { background: var(--amber); animation: reloadPulse .5s infinite; }
+@keyframes reloadPulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+.shot-timeline {
+  display: flex; gap: 3px; flex-wrap: wrap; margin-top: 8px;
+}
+.shot-pip {
+  width: 10px; height: 10px; border-radius: 2px;
+  background: var(--bg4); border: 1px solid var(--border);
+  transition: background .1s;
+}
+.shot-pip.fired { background: var(--fire); border-color: var(--fire); }
+.shot-pip.burst-end { border-color: var(--amber); }
+
+/* RPM gauge */
+.rpm-display {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  min-width: 80px;
+}
+.rpm-val { font-family: var(--mono); font-size: 28px; color: var(--green-bright); line-height: 1; }
+.rpm-val span { font-size: 11px; color: var(--text-muted); display: block; text-align: center; }
+
+/* ── DETAIL INFO PANEL ────────────────────────────── */
+.detail-info { display: flex; flex-direction: column; gap: 14px; }
+.detail-name {
+  font-family: var(--head); font-size: 32px; font-weight: 700;
+  letter-spacing: 2px; line-height: 1;
+}
+.detail-caliber { font-family: var(--mono); font-size: 18px; color: var(--green-bright); }
+
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat-block {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.stat-block-label { font-family: var(--mono); font-size: 9px; letter-spacing: 1.5px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
+.stat-block-value { font-family: var(--mono); font-size: 20px; color: var(--amber); }
+.stat-block-unit { font-size: 11px; color: var(--text-muted); }
+
+.desc-block {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+/* ── BURST CYCLE VISUALIZER ───────────────────────── */
+.burst-cycle {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.burst-title { font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px; }
+.burst-row { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; }
+.burst-shot-block {
+  width: 20px; height: 24px;
+  background: var(--green-dim); border: 1px solid var(--green);
+  border-radius: 2px;
+  position: relative;
+}
+.burst-shot-block.current { background: var(--green-bright); }
+.burst-gap {
+  height: 24px; width: 32px;
+  background: var(--amber-dim); border: 1px solid var(--amber);
+  border-radius: 2px; display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 8px; color: var(--amber); letter-spacing: 0;
+}
+
+/* ── FOLDERS VIEW ─────────────────────────────────── */
+.folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+.folder-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  cursor: pointer;
+  transition: all .2s;
+  position: relative;
+  overflow: hidden;
+}
+.folder-card:hover { border-color: var(--border-bright); transform: translateY(-1px); }
+.folder-top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.folder-icon { font-size: 28px; }
+.folder-card-name { font-family: var(--head); font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+.folder-desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.folder-count { font-family: var(--mono); font-size: 11px; color: var(--text-muted); margin-top: 8px; }
+.folder-strip {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+}
+
+/* ── SETTINGS ─────────────────────────────────────── */
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.sql-block {
+  background: var(--bg0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green-bright);
+  overflow-x: auto;
+  white-space: pre;
+  line-height: 1.6;
+}
+
+/* ── MODAL ────────────────────────────────────────── */
+.modal-bg {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.modal-bg.open { display: flex; }
+.modal {
+  background: var(--bg2);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius);
+  padding: 28px;
+  width: min(600px, 95vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: modalIn .2s ease;
+}
+@keyframes modalIn { from { opacity:0; transform: scale(.95) translateY(8px); } }
+.modal-title { font-family: var(--head); font-size: 22px; font-weight: 700; letter-spacing: 2px; margin-bottom: 20px; }
+
+/* ── TOAST ────────────────────────────────────────── */
+#toastContainer { position: fixed; bottom: 24px; right: 24px; z-index: 300; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  background: var(--bg3); border: 1px solid var(--border-bright);
+  border-radius: var(--radius); padding: 12px 18px;
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+  animation: toastIn .2s ease; min-width: 200px;
+}
+.toast.ok { border-left: 3px solid var(--green-bright); }
+.toast.err { border-left: 3px solid var(--red-bright); }
+@keyframes toastIn { from { opacity:0; transform: translateX(20px); } }
+
+/* ── DIVIDER ──────────────────────────────────────── */
+hr { border: none; border-top: 1px solid var(--border); }
+
+/* ── SCROLLBAR ────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg1); }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--green-dim); }
+
+/* ── RESPONSIVENESS ───────────────────────────────── */
+@media (max-width: 768px) {
+  .detail-layout { grid-template-columns: 1fr; }
+  .form-grid, .form-grid-3 { grid-template-columns: 1fr; }
+  .settings-grid { grid-template-columns: 1fr; }
+  header { padding: 0 12px; }
+  .logo { font-size: 16px; margin-right: 12px; }
+  .nav-btn { padding: 8px 10px; font-size: 11px; letter-spacing: 1px; }
+}
+
+/* ── MISC ─────────────────────────────────────────── */
+.flex-row { display: flex; gap: 10px; align-items: center; }
+.flex-row-end { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 2px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1px;
+  background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.badge.autoloader { background: rgba(200,160,74,.15); border-color: var(--amber-dim); color: var(--amber); }
+.badge.autokanone { background: rgba(200,74,74,.15); border-color: #7a3434; color: #e88; }
+.badge.normal { background: rgba(72,140,90,.15); border-color: var(--green-dim); color: var(--green-bright); }
+.badge.custom { background: rgba(100,80,180,.15); border-color: #4a3a7a; color: #b0a0ff; }
+.badge.revolver { background: rgba(180,120,60,.15); border-color: #7a5020; color: #e0a060; }
+
+.color-picker-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.color-swatch {
+  width: 28px; height: 28px; border-radius: 50%;
+  cursor: pointer; border: 2px solid transparent;
+  transition: border-color .15s;
+}
+.color-swatch.selected { border-color: #fff; }
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--bg4);
+  border-radius: 2px;
+  outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--green-bright);
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+<div id="app">
+<!-- ═══ HEADER ═══════════════════════════════════════ -->
+<header>
+  <div class="logo">ARMORY<span>.db</span></div>
+  <nav>
+    <button class="nav-btn active" onclick="nav('catalog')">⊞ Katalog</button>
+    <button class="nav-btn" onclick="nav('create')">＋ Erstellen</button>
+    <button class="nav-btn" onclick="nav('folders')">◫ Ordner</button>
+    <button class="nav-btn" onclick="nav('settings')">⚙ Setup</button>
+  </nav>
+  <div class="header-right">
+    <div class="conn-indicator">
+      <div class="conn-dot" id="connDot"></div>
+      <span id="connLabel">OFFLINE</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ VIEW: CATALOG ════════════════════════════════ -->
+<div class="view active" id="v-catalog">
+  <div>
+    <div class="page-title"><span>⊞</span> KATALOG</div>
+    <div class="page-sub" id="catalogSub">— kanonen werden geladen —</div>
+  </div>
+
+  <div class="catalog-toolbar">
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input id="searchInput" type="text" placeholder="Name, Kaliber, #tag suchen …" oninput="filterCatalog()">
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="toggleTagSearch()">🏷 Tags</button>
+    <button class="btn btn-primary btn-sm" onclick="nav('create')">+ Neu</button>
+  </div>
+
+  <!-- Tag quick-filter -->
+  <div id="tagFilterBar" style="display:none">
+    <div class="card" style="padding:14px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text-muted);margin-bottom:10px;letter-spacing:1px">SCHNELL-FILTER — KLICK ZUM FILTERN:</div>
+      <div class="filter-tags" id="tagFilterList"></div>
+    </div>
+  </div>
+
+  <!-- Folder filter -->
+  <div class="folder-bar" id="folderBar">
+    <button class="folder-chip active" style="border-color:var(--green)" data-id="" onclick="filterByFolder('')">Alle</button>
+  </div>
+
+  <!-- Grid -->
+  <div class="cannon-grid" id="cannonGrid">
+    <div class="empty-state" id="catalogEmpty">
+      <div class="empty-icon">🔫</div>
+      <div class="empty-title">Keine Kanonen</div>
+      <div class="empty-sub">Erstelle deine erste Kanone oder prüfe die Supabase-Verbindung</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ VIEW: CREATE / EDIT ══════════════════════════ -->
+<div class="view" id="v-create">
+  <div class="flex-row">
+    <div>
+      <div class="page-title" id="createTitle"><span>＋</span> NEUE KANONE</div>
+      <div class="page-sub">Alle markierten Felder sind Pflichtfelder</div>
+    </div>
+    <div style="flex:1"></div>
+    <button class="btn btn-secondary" onclick="nav('catalog')">Abbrechen</button>
+    <button class="btn btn-primary" onclick="saveCannon()">💾 Speichern</button>
+  </div>
+
+  <div class="form-grid">
+    <!-- Name + Caliber -->
+    <div class="field">
+      <label>Name *</label>
+      <input id="f-name" type="text" placeholder="z.B. Rh-120 L/44">
+    </div>
+    <div class="field">
+      <label>Kaliber</label>
+      <input id="f-caliber" type="text" placeholder="z.B. 120mm">
+    </div>
+
+    <!-- Type -->
+    <div class="field">
+      <label>Typ *</label>
+      <select id="f-type" onchange="onTypeChange()">
+        <option value="normal">Normale Kanone</option>
+        <option value="autokanone">Autokanone</option>
+        <option value="autoloader">Autoloader</option>
+        <option value="revolver">Revolverkanone</option>
+        <option value="custom">Custom</option>
+      </select>
+    </div>
+    <div class="field" id="customTypeWrap" style="display:none">
+      <label>Custom Typ Name</label>
+      <input id="f-custom-type" type="text" placeholder="z.B. Gauss-Kanone">
+    </div>
+
+    <!-- Fire Rate -->
+    <div class="field">
+      <label>Schussintervall (Sek.) *</label>
+      <input id="f-interval" type="number" min="0.01" step="0.01" placeholder="z.B. 0.1" oninput="updateRpmPreview()">
+      <div class="field-hint" id="rpmPreview">— RPM Vorschau —</div>
+    </div>
+    <div class="field">
+      <label>Land / Herkunft</label>
+      <input id="f-country" type="text" placeholder="z.B. Deutschland">
+    </div>
+
+    <!-- Burst / Reload -->
+    <div class="field">
+      <label>Schüsse vor langem Reload (0 = kein Burst)</label>
+      <input id="f-burst" type="number" min="0" step="1" value="0" placeholder="z.B. 8">
+      <div class="field-hint">0 = keine Burst-Mechanik</div>
+    </div>
+    <div class="field">
+      <label>Langer Reload (Sek.)</label>
+      <input id="f-ext-reload" type="number" min="0" step="0.1" value="0" placeholder="z.B. 12">
+    </div>
+
+    <div class="field">
+      <label>Schüsse für vollständige Erholung</label>
+      <input id="f-recovery" type="number" min="0" step="1" value="0" placeholder="z.B. 20">
+      <div class="field-hint">Nach wie vielen normalen Schüssen ist der Zyklus vollständig</div>
+    </div>
+
+    <div class="field">
+      <label>Ordner</label>
+      <select id="f-folder">
+        <option value="">— Kein Ordner —</option>
+      </select>
+    </div>
+
+    <!-- Tags -->
+    <div class="field form-full">
+      <label>Tags (Enter zum Hinzufügen, # wird automatisch vorangestellt)</label>
+      <div class="tags-input-row">
+        <input id="f-tag-input" type="text" placeholder="z.B. nato, panzerhaubitze, ww2" onkeydown="tagKeydown(event)">
+        <button class="btn btn-secondary btn-sm" onclick="addTagFromInput()">+ Tag</button>
+      </div>
+      <div class="tags-list" id="tagsPreview"></div>
+    </div>
+
+    <!-- Description -->
+    <div class="field form-full">
+      <label>Beschreibung</label>
+      <textarea id="f-desc" placeholder="Herkunft, Verwendung, Besonderheiten …"></textarea>
+    </div>
+  </div>
+
+  <div class="flex-row-end">
+    <button class="btn btn-secondary" onclick="nav('catalog')">Abbrechen</button>
+    <button class="btn btn-primary" onclick="saveCannon()">💾 Speichern</button>
+  </div>
+</div>
+
+<!-- ═══ VIEW: DETAIL ════════════════════════════════ -->
+<div class="view" id="v-detail">
+  <div class="flex-row">
+    <button class="btn btn-secondary btn-sm" onclick="nav('catalog')">← Zurück</button>
+    <button class="btn btn-secondary btn-sm" id="editBtn" onclick="editCurrent()">✎ Bearbeiten</button>
+    <div style="flex:1"></div>
+    <button class="btn btn-danger btn-sm" id="deleteBtn" onclick="deleteCurrent()">🗑 Löschen</button>
+  </div>
+
+  <div class="detail-layout">
+    <!-- LEFT: Simulator -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="simulator-wrap">
+        <div class="barrel-stage">
+          <div class="smoke-particles" id="smokeContainer"></div>
+          <!-- Tank Barrel SVG -->
+          <svg id="barrelSvg" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+            <!-- Barrel body -->
+            <defs>
+              <linearGradient id="barrelGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#3d5540"/>
+                <stop offset="40%" stop-color="#2a3d2c"/>
+                <stop offset="100%" stop-color="#1a2a1c"/>
+              </linearGradient>
+              <linearGradient id="mantletGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#4a6650"/>
+                <stop offset="100%" stop-color="#283828"/>
+              </linearGradient>
+              <filter id="glow">
+                <feGaussianBlur stdDeviation="4" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <radialGradient id="flashGrad" cx="0%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#fff7a0" stop-opacity="1"/>
+                <stop offset="40%" stop-color="#ff9830" stop-opacity="0.8"/>
+                <stop offset="100%" stop-color="#ff4500" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+
+            <!-- Mantlet (base) -->
+            <ellipse cx="80" cy="110" rx="55" ry="60" fill="url(#mantletGrad)" stroke="#1a2a1a" stroke-width="1"/>
+            <ellipse cx="80" cy="110" rx="48" ry="52" fill="none" stroke="#3d5040" stroke-width="1" stroke-dasharray="4,4"/>
+
+            <!-- Barrel main tube -->
+            <rect x="60" y="96" width="310" height="28" rx="4" fill="url(#barrelGrad)" stroke="#1a2a1a" stroke-width="1"/>
+
+            <!-- Barrel highlight -->
+            <rect x="60" y="97" width="310" height="6" rx="3" fill="rgba(255,255,255,0.06)"/>
+
+            <!-- Muzzle brake slots -->
+            <rect x="330" y="92" width="6" height="36" rx="2" fill="#121e12" stroke="#2a3a2a" stroke-width="1"/>
+            <rect x="342" y="92" width="6" height="36" rx="2" fill="#121e12" stroke="#2a3a2a" stroke-width="1"/>
+            <rect x="354" y="93" width="4" height="34" rx="1" fill="#0c150c"/>
+
+            <!-- Muzzle end -->
+            <rect x="360" y="94" width="30" height="32" rx="6" fill="#1e2e1e" stroke="#2a3e2a" stroke-width="1.5"/>
+            <ellipse cx="390" cy="110" rx="5" ry="14" fill="#0a0f0a" stroke="#2a3a2a" stroke-width="1"/>
+
+            <!-- Ejector port -->
+            <rect x="160" y="89" width="22" height="8" rx="3" fill="#121e12" stroke="#2a3a2a" stroke-width="1"/>
+
+            <!-- Thermal sleeve lines -->
+            <line x1="100" y1="97" x2="100" y2="123" stroke="#2a3a2a" stroke-width="1"/>
+            <line x1="130" y1="97" x2="130" y2="123" stroke="#2a3a2a" stroke-width="1"/>
+            <line x1="160" y1="97" x2="160" y2="123" stroke="#2a3a2a" stroke-width="1"/>
+            <line x1="190" y1="97" x2="190" y2="123" stroke="#2a3a2a" stroke-width="1"/>
+            <line x1="220" y1="97" x2="220" y2="123" stroke="#2a3a2a" stroke-width="1"/>
+            <line x1="250" y1="97" x2="250" y2="123" stroke="#2a3a2a" stroke-width="1"/>
+            <line x1="280" y1="97" x2="280" y2="123" stroke="#2a3a2a" stroke-width="1"/>
+            <line x1="310" y1="97" x2="310" y2="123" stroke="#2a3a2a" stroke-width="1"/>
+
+            <!-- Muzzle Flash (hidden by default) -->
+            <g id="muzzleFlash" opacity="0">
+              <ellipse cx="420" cy="110" rx="40" ry="22" fill="url(#flashGrad)" filter="url(#glow)"/>
+              <ellipse cx="410" cy="110" rx="16" ry="10" fill="#fff5a0" opacity="0.9"/>
+              <!-- Spikes -->
+              <line x1="420" y1="110" x2="465" y2="95" stroke="#ff9820" stroke-width="2" opacity="0.7"/>
+              <line x1="420" y1="110" x2="468" y2="110" stroke="#fff" stroke-width="1.5" opacity="0.8"/>
+              <line x1="420" y1="110" x2="465" y2="125" stroke="#ff9820" stroke-width="2" opacity="0.7"/>
+            </g>
+
+            <!-- Shell casing ejector -->
+            <g id="shellCasing" opacity="0">
+              <rect x="165" y="80" width="12" height="20" rx="3" fill="#c8a040" stroke="#a07820" stroke-width="1"/>
+              <ellipse cx="171" cy="80" rx="6" ry="3" fill="#e0b850"/>
+            </g>
+          </svg>
+        </div>
+
+        <!-- Controls -->
+        <div class="sim-controls">
+          <div class="rpm-display">
+            <div class="rpm-val" id="simRpm">—<span>RPM</span></div>
+          </div>
+          <div class="reload-bar-wrap">
+            <div class="reload-label" id="reloadLabel">BEREIT</div>
+            <div class="reload-bar">
+              <div class="reload-bar-fill" id="reloadBarFill"></div>
+            </div>
+            <div class="shot-timeline" id="shotTimeline"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;align-items:center">
+            <div class="shot-counter" id="shotCounter">0<span>SCHÜSSE</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-row">
+        <button class="btn btn-fire" id="fireBtn" onclick="toggleFire()">▶ FEUERN</button>
+        <button class="btn btn-secondary" onclick="resetSim()">↺ Reset</button>
+        <div id="simStatus" style="font-family:var(--mono);font-size:11px;color:var(--text-muted)"></div>
+      </div>
+
+      <!-- Burst cycle visual -->
+      <div class="burst-cycle" id="burstCycleViz" style="display:none">
+        <div class="burst-title">BURST-ZYKLUS VISUALISIERUNG</div>
+        <div class="burst-row" id="burstRow"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Info -->
+    <div class="detail-info">
+      <div>
+        <div class="detail-name" id="d-name">—</div>
+        <div class="detail-caliber" id="d-caliber">—</div>
+        <div style="margin-top:6px" id="d-badge"></div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-block">
+          <div class="stat-block-label">Schussintervall</div>
+          <div class="stat-block-value" id="d-interval">—<span class="stat-block-unit">s</span></div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-block-label">Feuerrate</div>
+          <div class="stat-block-value" id="d-rpm">—<span class="stat-block-unit">RPM</span></div>
+        </div>
+        <div class="stat-block" id="d-burst-block" style="display:none">
+          <div class="stat-block-label">Burst Schüsse</div>
+          <div class="stat-block-value" id="d-burst">—</div>
+        </div>
+        <div class="stat-block" id="d-extreload-block" style="display:none">
+          <div class="stat-block-label">Langer Reload</div>
+          <div class="stat-block-value" id="d-extreload">—<span class="stat-block-unit">s</span></div>
+        </div>
+        <div class="stat-block" id="d-country-block" style="display:none">
+          <div class="stat-block-label">Land</div>
+          <div class="stat-block-value" id="d-country" style="font-size:16px">—</div>
+        </div>
+        <div class="stat-block" id="d-folder-block" style="display:none">
+          <div class="stat-block-label">Ordner</div>
+          <div class="stat-block-value" id="d-folder" style="font-size:14px">—</div>
+        </div>
+      </div>
+
+      <div class="desc-block" id="d-desc" style="display:none"></div>
+
+      <div id="d-tags" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ VIEW: FOLDERS ═══════════════════════════════ -->
+<div class="view" id="v-folders">
+  <div class="flex-row">
+    <div>
+      <div class="page-title"><span>◫</span> ORDNER</div>
+      <div class="page-sub">Organisiere Kanonen in thematischen Gruppen</div>
+    </div>
+    <div style="flex:1"></div>
+    <button class="btn btn-primary" onclick="openFolderModal()">+ Neuer Ordner</button>
+  </div>
+
+  <div class="folder-grid" id="folderGrid">
+    <div class="empty-state">
+      <div class="empty-icon">◫</div>
+      <div class="empty-title">Keine Ordner</div>
+      <div class="empty-sub">Erstelle deinen ersten Ordner</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ VIEW: SETTINGS ══════════════════════════════ -->
+<div class="view" id="v-settings">
+  <div>
+    <div class="page-title"><span>⚙</span> SETUP & EINSTELLUNGEN</div>
+    <div class="page-sub">Supabase-Verbindung konfigurieren</div>
+  </div>
+
+  <div class="settings-grid">
+    <div class="card">
+      <div class="card-header"><div class="card-title">Supabase Verbindung</div></div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="field">
+          <label>Supabase URL</label>
+          <input id="s-url" type="text" placeholder="https://xxxxx.supabase.co">
+        </div>
+        <div class="field">
+          <label>Anon Key (öffentlich)</label>
+          <input id="s-key" type="text" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+        </div>
+        <div class="flex-row-end">
+          <button class="btn btn-primary" onclick="saveSettings()">Verbinden</button>
+          <button class="btn btn-secondary" onclick="testConnection()">Testen</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">Status</div></div>
+      <div id="connStatusBlock" style="font-family:var(--mono);font-size:12px;color:var(--text-muted);line-height:1.8">
+        Keine Verbindung konfiguriert.<br>Trage deine Supabase-Daten ein und klicke "Verbinden".
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Supabase SQL Setup — Einmalig ausführen</div>
+      <button class="btn btn-secondary btn-sm" onclick="copySQL()">📋 Kopieren</button>
+    </div>
+    <div class="field-hint" style="margin-bottom:10px">Kopiere diesen SQL-Code und führe ihn im Supabase SQL-Editor aus (einmalig)</div>
+    <div class="sql-block" id="sqlBlock">-- ARMORY.db — Supabase Schema Setup
+-- Führe dies einmalig im Supabase SQL-Editor aus
+
+CREATE TABLE IF NOT EXISTS armory_folders (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  color TEXT DEFAULT '#4d8c5e',
+  icon TEXT DEFAULT '📁',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS armory_cannons (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  caliber TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  cannon_type TEXT DEFAULT 'normal',
+  custom_type TEXT DEFAULT '',
+  shot_interval FLOAT DEFAULT 1.0,
+  burst_before_reload INTEGER DEFAULT 0,
+  extended_reload FLOAT DEFAULT 0,
+  shots_for_recovery INTEGER DEFAULT 0,
+  country TEXT DEFAULT '',
+  era TEXT DEFAULT '',
+  tags TEXT[] DEFAULT '{}',
+  folder_id UUID REFERENCES armory_folders(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Row Level Security (öffentlicher Zugriff, kein Login nötig)
+ALTER TABLE armory_folders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE armory_cannons ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "public_all_folders" ON armory_folders FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "public_all_cannons" ON armory_cannons FOR ALL USING (true) WITH CHECK (true);
+
+-- Realtime aktivieren
+ALTER PUBLICATION supabase_realtime ADD TABLE armory_cannons;
+ALTER PUBLICATION supabase_realtime ADD TABLE armory_folders;</div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: FOLDER ═══════════════════════════════ -->
+<div class="modal-bg" id="folderModal">
+  <div class="modal">
+    <div class="modal-title" id="folderModalTitle">Neuer Ordner</div>
+    <input type="hidden" id="fm-id">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="field">
+        <label>Name *</label>
+        <input id="fm-name" type="text" placeholder="z.B. WW2 Kanonen">
+      </div>
+      <div class="field">
+        <label>Beschreibung</label>
+        <textarea id="fm-desc" style="min-height:60px" placeholder="Kurze Beschreibung dieses Ordners …"></textarea>
+      </div>
+      <div class="field">
+        <label>Icon (Emoji)</label>
+        <input id="fm-icon" type="text" maxlength="2" placeholder="📁">
+      </div>
+      <div class="field">
+        <label>Farbe</label>
+        <div class="color-picker-row" id="colorPicker"></div>
+      </div>
+      <div class="flex-row-end" style="margin-top:8px">
+        <button class="btn btn-secondary" onclick="closeFolderModal()">Abbrechen</button>
+        <button class="btn btn-primary" onclick="saveFolder()">Speichern</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOAST CONTAINER ═════════════════════════════ -->
+<div id="toastContainer"></div>
+</div>
+
+<!-- ═══════════════ JAVASCRIPT ═══════════════════════ -->
+<script>
+// ── STATE ──────────────────────────────────────────
+let sb = null;
+let allCannons = [];
+let allFolders = [];
+let currentCannon = null;
+let editingId = null;
+let currentTags = [];
+let activeFolder = '';
+let activeTagFilter = '';
+let simRunning = false;
+let simTimer = null;
+let simShotsFired = 0;
+let simTotalShots = 0;
+let simIsReloading = false;
+let reloadAnimFrame = null;
+
+const FOLDER_COLORS = [
+  '#4d8c5e','#c8a04a','#c84a4a','#4a7ab8','#8c4daa','#4ab8b8',
+  '#b84ab8','#7ab84a','#b8784a','#4a8ab8'
+];
+
+// ── INIT ───────────────────────────────────────────
+window.onload = () => {
+  buildColorPicker();
+  loadSettings();
+  initSupabase();
+};
+
+function loadSettings() {
+  const url = localStorage.getItem('sb_url') || '';
+  const key = localStorage.getItem('sb_key') || '';
+  document.getElementById('s-url').value = url;
+  document.getElementById('s-key').value = key;
+}
+
+function initSupabase() {
+  const url = localStorage.getItem('sb_url');
+  const key = localStorage.getItem('sb_key');
+  if (!url || !key) { setConnStatus(false, 'Keine Konfiguration'); return; }
+  try {
+    sb = supabase.createClient(url, key);
+    loadData();
+    subscribeRealtime();
+  } catch(e) {
+    setConnStatus(false, e.message);
+  }
+}
+
+function setConnStatus(ok, msg='') {
+  const dot = document.getElementById('connDot');
+  const lbl = document.getElementById('connLabel');
+  const block = document.getElementById('connStatusBlock');
+  dot.className = 'conn-dot ' + (ok ? 'ok' : 'err');
+  lbl.textContent = ok ? 'VERBUNDEN' : 'OFFLINE';
+  if (block) block.innerHTML = ok
+    ? `<span style="color:var(--green-bright)">✓ Verbunden</span><br>${msg}`
+    : `<span style="color:var(--red-bright)">✗ Fehler</span><br>${msg || 'Keine Verbindung'}`;
+}
+
+async function saveSettings() {
+  const url = document.getElementById('s-url').value.trim();
+  const key = document.getElementById('s-key').value.trim();
+  if (!url || !key) { toast('Bitte URL und Key eingeben', 'err'); return; }
+  localStorage.setItem('sb_url', url);
+  localStorage.setItem('sb_key', key);
+  initSupabase();
+  toast('Einstellungen gespeichert, verbinde …', 'ok');
+}
+
+async function testConnection() {
+  if (!sb) { toast('Erst Einstellungen speichern', 'err'); return; }
+  const { error } = await sb.from('armory_cannons').select('id').limit(1);
+  if (error) { toast('Fehler: ' + error.message, 'err'); setConnStatus(false, error.message); }
+  else { toast('Verbindung OK ✓', 'ok'); setConnStatus(true, 'Verbindung erfolgreich getestet'); }
+}
+
+// ── DATA LOADING ───────────────────────────────────
+async function loadData() {
+  if (!sb) return;
+  try {
+    const [fRes, cRes] = await Promise.all([
+      sb.from('armory_folders').select('*').order('name'),
+      sb.from('armory_cannons').select('*').order('created_at', { ascending: false })
+    ]);
+    if (fRes.error) throw fRes.error;
+    if (cRes.error) throw cRes.error;
+    allFolders = fRes.data || [];
+    allCannons = cRes.data || [];
+    setConnStatus(true, `${allCannons.length} Kanonen geladen`);
+    renderCatalog();
+    renderFolders();
+    renderFolderBar();
+    renderFolderDropdowns();
+  } catch(e) {
+    setConnStatus(false, e.message);
+    toast('Fehler beim Laden: ' + e.message, 'err');
+  }
+}
+
+function subscribeRealtime() {
+  if (!sb) return;
+  sb.channel('armory').on('postgres_changes', { event: '*', schema: 'public' }, () => {
+    loadData();
+  }).subscribe();
+}
+
+// ── NAVIGATION ─────────────────────────────────────
+function nav(view, cannonId=null) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('v-' + view).classList.add('active');
+  const navMap = { catalog:0, create:1, folders:2, settings:3 };
+  const idx = navMap[view];
+  if (idx !== undefined) document.querySelectorAll('.nav-btn')[idx]?.classList.add('active');
+
+  if (view === 'detail' && cannonId) {
+    stopSim();
+    showDetail(cannonId);
+  }
+  if (view === 'create' && !editingId) {
+    clearCreateForm();
+  }
+}
+
+// ── CATALOG RENDERING ──────────────────────────────
+function renderCatalog() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  let filtered = allCannons.filter(c => {
+    const matchFolder = !activeFolder || c.folder_id === activeFolder;
+    const matchTag = !activeTagFilter || (c.tags || []).includes(activeTagFilter);
+    const matchQ = !q || [c.name, c.caliber, c.description, c.cannon_type, ...(c.tags||[])].some(s => s && s.toLowerCase().includes(q.replace('#','')));
+    return matchFolder && matchTag && matchQ;
+  });
+
+  const grid = document.getElementById('cannonGrid');
+  const sub = document.getElementById('catalogSub');
+  sub.textContent = `— ${filtered.length} von ${allCannons.length} Kanonen —`;
+
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">🔫</div>
+      <div class="empty-title">${allCannons.length === 0 ? 'Keine Kanonen' : 'Keine Treffer'}</div>
+      <div class="empty-sub">${allCannons.length === 0 ? 'Erstelle deine erste Kanone oben' : 'Suchbegriff oder Filter anpassen'}</div>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(c => cannonCardHTML(c)).join('');
+  // Re-render tags filter
+  updateTagCloud();
+}
+
+function cannonCardHTML(c) {
+  const rpm = c.shot_interval > 0 ? Math.round(60 / c.shot_interval) : 0;
+  const typeCls = c.cannon_type || 'normal';
+  const typeLabel = typeDisplayName(c.cannon_type, c.custom_type);
+  const folder = allFolders.find(f => f.id === c.folder_id);
+  const tags = (c.tags || []).slice(0, 4).map(t => `<span class="tag">${t}</span>`).join('');
+
+  return `<div class="cannon-card type-${typeCls}" onclick="openDetail('${c.id}')">
+    <div class="card-name">${esc(c.name)}</div>
+    <div class="card-caliber">${c.caliber ? esc(c.caliber) : '—'}</div>
+    <div class="card-stats">
+      <div class="card-stat">
+        <div class="card-stat-label">RPM</div>
+        <div class="card-stat-value">${rpm}</div>
+      </div>
+      <div class="card-stat">
+        <div class="card-stat-label">Intervall</div>
+        <div class="card-stat-value">${c.shot_interval}s</div>
+      </div>
+      ${c.burst_before_reload > 0 ? `<div class="card-stat">
+        <div class="card-stat-label">Burst</div>
+        <div class="card-stat-value">${c.burst_before_reload}×</div>
+      </div>` : ''}
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <span class="badge ${typeCls}">${typeLabel}</span>
+      ${folder ? `<span class="badge" style="border-color:${folder.color};color:${folder.color}">${folder.icon} ${esc(folder.name)}</span>` : ''}
+    </div>
+    ${tags ? `<div class="card-tags" style="margin-top:8px">${tags}</div>` : ''}
+  </div>`;
+}
+
+function filterCatalog() { renderCatalog(); }
+
+function filterByFolder(id) {
+  activeFolder = id;
+  document.querySelectorAll('.folder-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.id === id);
+    if (c.classList.contains('active')) c.style.borderColor = id ? (allFolders.find(f=>f.id===id)?.color || 'var(--green)') : 'var(--green)';
+    else c.style.borderColor = '';
+  });
+  renderCatalog();
+}
+
+function toggleTagSearch() {
+  const bar = document.getElementById('tagFilterBar');
+  bar.style.display = bar.style.display === 'none' ? 'block' : 'none';
+}
+
+function updateTagCloud() {
+  const allTags = new Set();
+  allCannons.forEach(c => (c.tags||[]).forEach(t => allTags.add(t)));
+  const types = ['#autoloader','#autokanone','#normal','#revolver'];
+  const tagList = document.getElementById('tagFilterList');
+  const tagArr = [...types, ...Array.from(allTags).filter(t => !types.includes(t))];
+  tagList.innerHTML = tagArr.map(t =>
+    `<span class="tag ${t === activeTagFilter ? 'active' : ''}" onclick="setTagFilter('${t}')">${t}</span>`
+  ).join('');
+}
+
+function setTagFilter(tag) {
+  activeTagFilter = (activeTagFilter === tag) ? '' : tag;
+  renderCatalog();
+}
+
+// ── DETAIL VIEW ────────────────────────────────────
+function openDetail(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('v-detail').classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  stopSim();
+  showDetail(id);
+}
+
+function showDetail(id) {
+  const c = allCannons.find(x => x.id === id);
+  if (!c) return;
+  currentCannon = c;
+  document.getElementById('editBtn').onclick = () => editCurrent();
+  document.getElementById('deleteBtn').onclick = () => deleteCurrent();
+
+  const rpm = c.shot_interval > 0 ? (60 / c.shot_interval).toFixed(1) : '∞';
+  document.getElementById('d-name').textContent = c.name;
+  document.getElementById('d-caliber').textContent = c.caliber || '— unbekanntes Kaliber';
+  document.getElementById('d-interval').innerHTML = `${c.shot_interval}<span class="stat-block-unit">s</span>`;
+  document.getElementById('d-rpm').innerHTML = `${rpm}<span class="stat-block-unit">RPM</span>`;
+  document.getElementById('simRpm').innerHTML = `${rpm}<span>RPM</span>`;
+
+  const typeLabel = typeDisplayName(c.cannon_type, c.custom_type);
+  document.getElementById('d-badge').innerHTML = `<span class="badge ${c.cannon_type || 'normal'}">${typeLabel}</span>`;
+
+  // Burst info
+  if (c.burst_before_reload > 0) {
+    document.getElementById('d-burst-block').style.display = '';
+    document.getElementById('d-extreload-block').style.display = '';
+    document.getElementById('d-burst').textContent = c.burst_before_reload;
+    document.getElementById('d-extreload').innerHTML = `${c.extended_reload}<span class="stat-block-unit">s</span>`;
+    renderBurstCycle(c);
+  } else {
+    document.getElementById('d-burst-block').style.display = 'none';
+    document.getElementById('d-extreload-block').style.display = 'none';
+    document.getElementById('burstCycleViz').style.display = 'none';
+  }
+
+  // Country
+  if (c.country) {
+    document.getElementById('d-country-block').style.display = '';
+    document.getElementById('d-country').textContent = c.country;
+  } else document.getElementById('d-country-block').style.display = 'none';
+
+  // Folder
+  const folder = allFolders.find(f => f.id === c.folder_id);
+  if (folder) {
+    document.getElementById('d-folder-block').style.display = '';
+    document.getElementById('d-folder').innerHTML = `<span style="color:${folder.color}">${folder.icon} ${esc(folder.name)}</span>`;
+  } else document.getElementById('d-folder-block').style.display = 'none';
+
+  // Description
+  if (c.description) {
+    const db = document.getElementById('d-desc');
+    db.style.display = '';
+    db.textContent = c.description;
+  } else document.getElementById('d-desc').style.display = 'none';
+
+  // Tags
+  const dt = document.getElementById('d-tags');
+  dt.innerHTML = (c.tags||[]).map(t => `<span class="tag">${t}</span>`).join('');
+
+  // Shot timeline pips
+  buildShotTimeline(c);
+  resetSim();
+}
+
+function renderBurstCycle(c) {
+  const viz = document.getElementById('burstCycleViz');
+  const row = document.getElementById('burstRow');
+  viz.style.display = '';
+  let html = '';
+  const n = Math.min(c.burst_before_reload, 30);
+  for (let i = 0; i < n; i++) {
+    html += `<div class="burst-shot-block" id="bsp-${i}" title="Schuss ${i+1}"></div>`;
+    if (i < n-1) {
+      const ms = Math.round(c.shot_interval * 1000);
+      html += `<div style="font-family:var(--mono);font-size:8px;color:var(--text-muted);display:flex;align-items:center">${ms}ms</div>`;
+    }
+  }
+  // Extended reload block
+  const er = Math.round(c.extended_reload * 1000);
+  html += `<div class="burst-gap">${c.extended_reload}s</div>`;
+  row.innerHTML = html;
+}
+
+function buildShotTimeline(c) {
+  const tl = document.getElementById('shotTimeline');
+  if (!c.burst_before_reload || c.burst_before_reload === 0) { tl.innerHTML = ''; return; }
+  const n = Math.min(c.burst_before_reload, 40);
+  tl.innerHTML = Array.from({length:n}, (_,i) =>
+    `<div class="shot-pip" id="pip-${i}"></div>`
+  ).join('');
+}
+
+function editCurrent() {
+  if (!currentCannon) return;
+  editingId = currentCannon.id;
+  const c = currentCannon;
+  document.getElementById('createTitle').innerHTML = '<span>✎</span> BEARBEITEN';
+  document.getElementById('f-name').value = c.name || '';
+  document.getElementById('f-caliber').value = c.caliber || '';
+  document.getElementById('f-type').value = c.cannon_type || 'normal';
+  document.getElementById('f-custom-type').value = c.custom_type || '';
+  document.getElementById('f-interval').value = c.shot_interval || '';
+  document.getElementById('f-burst').value = c.burst_before_reload || 0;
+  document.getElementById('f-ext-reload').value = c.extended_reload || 0;
+  document.getElementById('f-recovery').value = c.shots_for_recovery || 0;
+  document.getElementById('f-folder').value = c.folder_id || '';
+  document.getElementById('f-country').value = c.country || '';
+  document.getElementById('f-desc').value = c.description || '';
+  currentTags = [...(c.tags || [])];
+  renderTagsPreview();
+  updateRpmPreview();
+  onTypeChange();
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('v-create').classList.add('active');
+}
+
+async function deleteCurrent() {
+  if (!currentCannon || !sb) return;
+  if (!confirm(`"${currentCannon.name}" wirklich löschen?`)) return;
+  const { error } = await sb.from('armory_cannons').delete().eq('id', currentCannon.id);
+  if (error) { toast('Fehler beim Löschen: ' + error.message, 'err'); return; }
+  toast('Kanone gelöscht', 'ok');
+  currentCannon = null;
+  nav('catalog');
+  loadData();
+}
+
+// ── SIMULATOR ──────────────────────────────────────
+function toggleFire() {
+  if (simRunning) stopSim();
+  else startSim();
+}
+
+function startSim() {
+  if (!currentCannon) return;
+  simRunning = true;
+  document.getElementById('fireBtn').textContent = '⏹ STOPP';
+  document.getElementById('fireBtn').classList.add('firing');
+  fireSim();
+}
+
+function stopSim() {
+  simRunning = false;
+  clearTimeout(simTimer);
+  cancelAnimationFrame(reloadAnimFrame);
+  document.getElementById('fireBtn').textContent = '▶ FEUERN';
+  document.getElementById('fireBtn').classList.remove('firing');
+  document.getElementById('reloadLabel').textContent = 'GESTOPPT';
+  document.getElementById('reloadBarFill').classList.remove('reloading');
+  document.getElementById('simStatus').textContent = '';
+}
+
+function resetSim() {
+  stopSim();
+  simShotsFired = 0;
+  simTotalShots = 0;
+  simIsReloading = false;
+  document.getElementById('shotCounter').innerHTML = '0<span>SCHÜSSE</span>';
+  document.getElementById('reloadLabel').textContent = 'BEREIT';
+  document.getElementById('reloadBarFill').style.width = '100%';
+  document.getElementById('reloadBarFill').classList.remove('reloading');
+  document.getElementById('simStatus').textContent = '';
+  document.querySelectorAll('.shot-pip').forEach(p => p.classList.remove('fired'));
+  document.querySelectorAll('.burst-shot-block').forEach(b => b.classList.remove('current'));
+}
+
+function fireSim() {
+  if (!simRunning || !currentCannon) return;
+  const c = currentCannon;
+
+  // Fire the shot
+  simTotalShots++;
+  simShotsFired++;
+  document.getElementById('shotCounter').innerHTML = `${simTotalShots}<span>SCHÜSSE</span>`;
+  animateShot();
+
+  // Update shot timeline
+  const pip = document.getElementById(`pip-${(simShotsFired-1) % (c.burst_before_reload || 999)}`);
+  if (pip) pip.classList.add('fired');
+
+  // Highlight burst block
+  if (c.burst_before_reload > 0) {
+    document.querySelectorAll('.burst-shot-block').forEach(b => b.classList.remove('current'));
+    const bsp = document.getElementById(`bsp-${(simShotsFired-1) % c.burst_before_reload}`);
+    if (bsp) bsp.classList.add('current');
+  }
+
+  // Determine next delay
+  const hasBurst = c.burst_before_reload > 0;
+  if (hasBurst && simShotsFired >= c.burst_before_reload) {
+    // Extended reload
+    simShotsFired = 0;
+    document.querySelectorAll('.shot-pip').forEach(p => p.classList.remove('fired'));
+    const delay = c.extended_reload * 1000;
+    animateReloadBar(delay, true);
+    document.getElementById('reloadLabel').textContent = `LANGER RELOAD — ${c.extended_reload}s`;
+    simTimer = setTimeout(() => {
+      if (simRunning) fireSim();
+    }, delay);
+  } else {
+    const delay = c.shot_interval * 1000;
+    animateReloadBar(delay, false);
+    document.getElementById('reloadLabel').textContent = `NACHLADEN — ${c.shot_interval}s`;
+    simTimer = setTimeout(() => {
+      if (simRunning) fireSim();
+    }, delay);
+  }
+}
+
+function animateReloadBar(durationMs, isExtended) {
+  const fill = document.getElementById('reloadBarFill');
+  fill.classList.toggle('reloading', isExtended);
+  fill.style.transition = 'none';
+  fill.style.width = '0%';
+  const start = performance.now();
+  function tick(now) {
+    const elapsed = now - start;
+    const pct = Math.min(elapsed / durationMs * 100, 100);
+    fill.style.width = pct + '%';
+    if (pct < 100 && simRunning) reloadAnimFrame = requestAnimationFrame(tick);
+    else fill.style.width = '100%';
+  }
+  fill.style.transition = '';
+  requestAnimationFrame(tick);
+}
+
+function animateShot() {
+  const barrel = document.getElementById('barrelSvg');
+  const flash = document.getElementById('muzzleFlash');
+  const shell = document.getElementById('shellCasing');
+
+  barrel.classList.remove('recoil');
+  void barrel.offsetWidth;
+  barrel.classList.add('recoil');
+  setTimeout(() => barrel.classList.remove('recoil'), 200);
+
+  // Muzzle flash
+  flash.style.opacity = '0';
+  flash.setAttribute('opacity', '1');
+  let alpha = 1;
+  const fadeFlash = () => {
+    alpha -= 0.15;
+    if (alpha > 0) { flash.setAttribute('opacity', alpha); requestAnimationFrame(fadeFlash); }
+    else flash.setAttribute('opacity', '0');
+  };
+  requestAnimationFrame(fadeFlash);
+
+  // Shell casing
+  shell.setAttribute('opacity', '1');
+  let shellY = 80;
+  let shellVY = -3;
+  const animShell = () => {
+    shellVY += 0.5;
+    shellY += shellVY;
+    shell.setAttribute('transform', `translate(0, ${shellY - 80})`);
+    if (shellY < 160) requestAnimationFrame(animShell);
+    else shell.setAttribute('opacity', '0');
+  };
+  shell.setAttribute('transform', '');
+  requestAnimationFrame(animShell);
+
+  // Smoke
+  spawnSmoke();
+
+  // Flash button
+  const btn = document.getElementById('fireBtn');
+  btn.classList.add('firing');
+  setTimeout(() => btn.classList.remove('firing'), 200);
+}
+
+function spawnSmoke() {
+  const container = document.getElementById('smokeContainer');
+  for (let i = 0; i < 3; i++) {
+    const el = document.createElement('div');
+    el.className = 'smoke-particle';
+    const size = 10 + Math.random() * 20;
+    el.style.cssText = `width:${size}px;height:${size}px;
+      right:${Math.random() * 40}px;
+      bottom:${40 + Math.random() * 40}px;
+      --dx:${-20 + Math.random() * 40}px;
+      animation-delay:${Math.random() * 0.2}s`;
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 1400);
+  }
+}
+
+// ── CREATE / SAVE CANNON ───────────────────────────
+function clearCreateForm() {
+  editingId = null;
+  currentTags = [];
+  document.getElementById('createTitle').innerHTML = '<span>＋</span> NEUE KANONE';
+  ['f-name','f-caliber','f-interval','f-country','f-desc','f-custom-type'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('f-type').value = 'normal';
+  document.getElementById('f-burst').value = '0';
+  document.getElementById('f-ext-reload').value = '0';
+  document.getElementById('f-recovery').value = '0';
+  document.getElementById('f-folder').value = '';
+  document.getElementById('tagsPreview').innerHTML = '';
+  document.getElementById('rpmPreview').textContent = '— RPM Vorschau —';
+  onTypeChange();
+}
+
+function onTypeChange() {
+  const t = document.getElementById('f-type').value;
+  document.getElementById('customTypeWrap').style.display = t === 'custom' ? '' : 'none';
+}
+
+function updateRpmPreview() {
+  const val = parseFloat(document.getElementById('f-interval').value);
+  const el = document.getElementById('rpmPreview');
+  if (!val || val <= 0) { el.textContent = '— RPM Vorschau —'; return; }
+  const rpm = (60 / val).toFixed(1);
+  el.textContent = `≈ ${rpm} Schuss/Min`;
+}
+
+function tagKeydown(e) {
+  if (e.key === 'Enter') { e.preventDefault(); addTagFromInput(); }
+}
+
+function addTagFromInput() {
+  const inp = document.getElementById('f-tag-input');
+  let val = inp.value.trim().toLowerCase().replace(/\s+/g,'_');
+  if (!val) return;
+  if (!val.startsWith('#')) val = '#' + val;
+  if (!currentTags.includes(val)) {
+    currentTags.push(val);
+    renderTagsPreview();
+  }
+  inp.value = '';
+}
+
+function removeTag(tag) {
+  currentTags = currentTags.filter(t => t !== tag);
+  renderTagsPreview();
+}
+
+function renderTagsPreview() {
+  document.getElementById('tagsPreview').innerHTML = currentTags.map(t =>
+    `<span class="tag">${t} <span class="tag-remove" onclick="removeTag('${t}')">×</span></span>`
+  ).join('');
+}
+
+async function saveCannon() {
+  if (!sb) { toast('Keine Supabase-Verbindung. Bitte Setup konfigurieren.', 'err'); return; }
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { toast('Name ist Pflichtfeld', 'err'); return; }
+  const interval = parseFloat(document.getElementById('f-interval').value);
+  if (!interval || interval <= 0) { toast('Schussintervall muss > 0 sein', 'err'); return; }
+
+  // Auto-add type as tag
+  const typ = document.getElementById('f-type').value;
+  const typeTag = '#' + typ;
+  if (!currentTags.includes(typeTag)) currentTags.push(typeTag);
+
+  const data = {
+    name,
+    caliber: document.getElementById('f-caliber').value.trim(),
+    cannon_type: typ,
+    custom_type: document.getElementById('f-custom-type').value.trim(),
+    shot_interval: interval,
+    burst_before_reload: parseInt(document.getElementById('f-burst').value) || 0,
+    extended_reload: parseFloat(document.getElementById('f-ext-reload').value) || 0,
+    shots_for_recovery: parseInt(document.getElementById('f-recovery').value) || 0,
+    country: document.getElementById('f-country').value.trim(),
+    description: document.getElementById('f-desc').value.trim(),
+    tags: currentTags,
+    folder_id: document.getElementById('f-folder').value || null,
+    updated_at: new Date().toISOString()
+  };
+
+  let error;
+  if (editingId) {
+    ({ error } = await sb.from('armory_cannons').update(data).eq('id', editingId));
+  } else {
+    ({ error } = await sb.from('armory_cannons').insert([data]));
+  }
+
+  if (error) { toast('Fehler: ' + error.message, 'err'); return; }
+  toast(editingId ? 'Kanone aktualisiert ✓' : 'Kanone gespeichert ✓', 'ok');
+  editingId = null;
+  await loadData();
+  nav('catalog');
+}
+
+// ── FOLDERS ────────────────────────────────────────
+function renderFolders() {
+  const grid = document.getElementById('folderGrid');
+  if (!allFolders.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">◫</div>
+      <div class="empty-title">Keine Ordner</div>
+      <div class="empty-sub">Erstelle deinen ersten Ordner</div>
+    </div>`;
+    return;
+  }
+  grid.innerHTML = allFolders.map(f => {
+    const cnt = allCannons.filter(c => c.folder_id === f.id).length;
+    return `<div class="folder-card" onclick="filterByFolder('${f.id}'); nav('catalog')">
+      <div class="folder-strip" style="background:${f.color}"></div>
+      <div class="folder-top">
+        <div class="folder-icon">${f.icon || '📁'}</div>
+        <div>
+          <div class="folder-card-name" style="color:${f.color}">${esc(f.name)}</div>
+        </div>
+        <div style="flex:1"></div>
+        <button class="btn-icon" onclick="event.stopPropagation();editFolder('${f.id}')">✎</button>
+        <button class="btn-icon" style="color:var(--red-bright)" onclick="event.stopPropagation();deleteFolder('${f.id}')">🗑</button>
+      </div>
+      ${f.description ? `<div class="folder-desc">${esc(f.description)}</div>` : ''}
+      <div class="folder-count">${cnt} Kanone${cnt !== 1 ? 'n' : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderFolderBar() {
+  const bar = document.getElementById('folderBar');
+  bar.innerHTML = `<button class="folder-chip ${!activeFolder ? 'active' : ''}" style="${!activeFolder ? 'border-color:var(--green)' : ''}" data-id="" onclick="filterByFolder('')">Alle</button>`;
+  allFolders.forEach(f => {
+    const isActive = activeFolder === f.id;
+    bar.innerHTML += `<button class="folder-chip ${isActive ? 'active' : ''}" data-id="${f.id}" style="${isActive ? `border-color:${f.color};background:${f.color}20;color:${f.color}` : ''}" onclick="filterByFolder('${f.id}')"><span style="background:${f.color}" class="folder-dot"></span>${esc(f.name)}</button>`;
+  });
+}
+
+function renderFolderDropdowns() {
+  const sel = document.getElementById('f-folder');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— Kein Ordner —</option>' +
+    allFolders.map(f => `<option value="${f.id}">${f.icon || '📁'} ${esc(f.name)}</option>`).join('');
+  sel.value = cur;
+}
+
+let editingFolderId = null;
+
+function openFolderModal(id=null) {
+  editingFolderId = id;
+  document.getElementById('folderModalTitle').textContent = id ? 'Ordner bearbeiten' : 'Neuer Ordner';
+  if (id) {
+    const f = allFolders.find(x => x.id === id);
+    if (f) {
+      document.getElementById('fm-name').value = f.name;
+      document.getElementById('fm-desc').value = f.description || '';
+      document.getElementById('fm-icon').value = f.icon || '📁';
+      setColorSelected(f.color);
+    }
+  } else {
+    document.getElementById('fm-name').value = '';
+    document.getElementById('fm-desc').value = '';
+    document.getElementById('fm-icon').value = '📁';
+    setColorSelected(FOLDER_COLORS[0]);
+  }
+  document.getElementById('folderModal').classList.add('open');
+}
+
+function editFolder(id) { openFolderModal(id); }
+
+function closeFolderModal() {
+  document.getElementById('folderModal').classList.remove('open');
+  editingFolderId = null;
+}
+
+async function saveFolder() {
+  if (!sb) { toast('Keine Supabase-Verbindung', 'err'); return; }
+  const name = document.getElementById('fm-name').value.trim();
+  if (!name) { toast('Name ist Pflichtfeld', 'err'); return; }
+  const color = document.querySelector('.color-swatch.selected')?.dataset.color || '#4d8c5e';
+  const data = {
+    name,
+    description: document.getElementById('fm-desc').value.trim(),
+    icon: document.getElementById('fm-icon').value || '📁',
+    color
+  };
+  let error;
+  if (editingFolderId) {
+    ({ error } = await sb.from('armory_folders').update(data).eq('id', editingFolderId));
+  } else {
+    ({ error } = await sb.from('armory_folders').insert([data]));
+  }
+  if (error) { toast('Fehler: ' + error.message, 'err'); return; }
+  toast(editingFolderId ? 'Ordner aktualisiert ✓' : 'Ordner erstellt ✓', 'ok');
+  closeFolderModal();
+  await loadData();
+}
+
+async function deleteFolder(id) {
+  if (!sb) return;
+  const f = allFolders.find(x => x.id === id);
+  if (!confirm(`Ordner "${f?.name}" löschen? Kanonen bleiben erhalten.`)) return;
+  const { error } = await sb.from('armory_folders').delete().eq('id', id);
+  if (error) { toast('Fehler: ' + error.message, 'err'); return; }
+  toast('Ordner gelöscht', 'ok');
+  if (activeFolder === id) activeFolder = '';
+  await loadData();
+}
+
+// ── COLOR PICKER ───────────────────────────────────
+function buildColorPicker() {
+  const cp = document.getElementById('colorPicker');
+  cp.innerHTML = FOLDER_COLORS.map(c =>
+    `<div class="color-swatch" data-color="${c}" style="background:${c}" onclick="setColorSelected('${c}')"></div>`
+  ).join('');
+  setColorSelected(FOLDER_COLORS[0]);
+}
+
+function setColorSelected(color) {
+  document.querySelectorAll('.color-swatch').forEach(s => {
+    s.classList.toggle('selected', s.dataset.color === color);
+  });
+}
+
+// ── HELPERS ────────────────────────────────────────
+function typeDisplayName(type, custom) {
+  const map = {
+    normal: 'Normale Kanone',
+    autokanone: 'Autokanone',
+    autoloader: 'Autoloader',
+    revolver: 'Revolverkanone',
+    custom: custom || 'Custom'
+  };
+  return map[type] || type || 'Unbekannt';
+}
+
+function esc(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toast(msg, type='ok') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+function copySQL() {
+  const sql = document.getElementById('sqlBlock').textContent;
+  navigator.clipboard.writeText(sql).then(() => toast('SQL kopiert ✓', 'ok'));
+}
+
+// Close modal on outside click
+document.getElementById('folderModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeFolderModal();
+});
+</script>
+</body>
+</html>
